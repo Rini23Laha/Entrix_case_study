@@ -1,0 +1,44 @@
+*.swp
+package-lock.json
+__pycache__
+.pytest_cache
+.venv
+*.egg-info
+.venv
+
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+jest.config.json
+tsconfig
+package.json
+
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# CDK output
+cdk.out/
+
+# Package files
+package-lock.json
+*.egg-info
+
+# IDE files
+.swp
+*.swp
+
+# Build files
+.cdk.staging/
+
+# Test files
+jest.config.json
+tsconfigs

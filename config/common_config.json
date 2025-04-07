@@ -1,0 +1,46 @@
+{
+  "region": "us-east-1",
+  "account_id": "462482722816",
+  "s3": {
+    "domain_bucket": "energypipelinebasestack-domainenergypipelinebucket-c29rvzngjxly",
+  
+    "input_prefix": "landing/data/ingestion_time=*/",
+    "raw_output_prefix": "raw/data/",
+    "refined_output_prefix": "refined/data",
+    "gold_output_prefix": "gold/data",
+    
+
+    "scripts_prefix": {
+      "raw": "raw/glue/",
+      "refined": "refined/glue/",
+      "gold": "gold/glue/"
+    },
+
+    "temp_prefix": {
+      "raw": "raw/temp/",
+      "refined": "refined/temp/",
+      "gold": "gold/temp/"
+    },
+
+    "checkpoint_prefix": "checkpoints/",
+    "checkpoint_files": {
+      "raw": "checkpoints/raw_last_processed.json",
+      "refined": "checkpoints/refined_last_processed.json",
+      "gold": "checkpoints/gold_last_processed.json"
+    },
+    "yaml_config_path": "yaml_config",
+    "yaml_config":{
+      "raw" : "raw/config",
+      "refined" : "refined/config/schema/refined_market_price_schema.yml",
+      "gold" : "gold/config"
+    }
+  },
+
+  "glue_jobs": {
+    "energy_pipeline_batch_raw": "market_price_data_raw_to_refined",
+    "energy_pipeline_batch_refined": "market_price_data_refined_to_gold",
+    "energy_pipeline_batch_gold": "market_price_data_gold_transform"
+  },
+
+  "sns_topic": "arn:aws:sns:us-east-1:462482722816:PipelineFailureTopic"
+}
