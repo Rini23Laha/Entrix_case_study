@@ -1,0 +1,115 @@
+# SCD Type 2 merge query for energy data refined layer
+merge_query: |
+  WITH deduplicated_source AS (
+      -- Get the latest version of each source record
+      SELECT * FROM (
+          SELECT 
+              *, 
+              ROW_NUMBER() OVER (
+                  PARTITION BY delivery_day, delivery_hour 
+                  ORDER BY ingestion_time DESC
+              ) as row_num
+          FROM source_data
+      ) WHERE row_num = 1
+  ),
+  deduplicated_target AS (
+      -- Get the latest version of each active target record
+      SELECT * FROM (
+          SELECT 
+              *, 
+              ROW_NUMBER() OVER (
+                  PARTITION BY delivery_day, delivery_hour 
+                  ORDER BY record_start_time DESC
+              ) as row_num
+          FROM target_data
+          WHERE is_active = true
+      ) WHERE row_num = 1
+  ),
+  records_to_expire AS (
+      -- Find records that need to be expired (values changed)
+      SELECT 
+          t.delivery_day,
+          t.delivery_hour,
+          t.price,
+          t.delivery_start_time_utc,
+          t.record_start_time,
+          -- Set the end time to current timestamp
+          current_timestamp() as record_end_time,
+          -- Mark as inactive
+          false as is_active,
+          t.ingestion_time,
+          date_format(current_timestamp(), 'yyyy-MM-dd') as database_etl_dt
+      FROM deduplicated_target t
+      JOIN deduplicated_source s ON 
+          t.delivery_day = s.delivery_day AND 
+          t.delivery_hour = s.delivery_hour
+      WHERE 
+          -- Explicit comparison for price - this is the key change field
+          ABS(t.price - s.price) > 0.0001  -- Use a small threshold to account for floating point
+  ),
+  records_to_insert AS (
+      -- New records to insert (either brand new or updated versions)
+      SELECT 
+          s.delivery_day,
+          s.delivery_hour,
+          s.price,
+          s.delivery_start_time_utc,
+          -- For new records, use source timestamp
+          s.record_start_time,
+          s.record_end_time,
+          s.is_active,
+          s.ingestion_time,
+          s.database_etl_dt
+      FROM deduplicated_source s
+      LEFT JOIN deduplicated_target t ON 
+          s.delivery_day = t.delivery_day AND 
+          s.delivery_hour = t.delivery_hour
+      WHERE 
+          -- Include if record is new
+          t.delivery_day IS NULL OR
+          -- Include if price has changed (using same threshold)
+          (t.delivery_day IS NOT NULL AND ABS(t.price - s.price) > 0.0001)
+  ),
+  unchanged_active_records AS (
+      -- Records that don't need to change (keep active)
+      SELECT 
+          t.delivery_day,
+          t.delivery_hour,
+          t.price,
+          t.delivery_start_time_utc,
+          t.record_start_time,
+          t.record_end_time,
+          t.is_active,
+          t.ingestion_time,
+          t.database_etl_dt
+      FROM deduplicated_target t
+      JOIN deduplicated_source s ON 
+          t.delivery_day = s.delivery_day AND 
+          t.delivery_hour = s.delivery_hour
+      WHERE 
+          -- Only include if values have not changed
+          ABS(t.price - s.price) <= 0.0001
+  ),
+  all_inactive_records AS (
+      -- Keep all existing inactive records for history
+      SELECT 
+          delivery_day,
+          delivery_hour,
+          price,
+          delivery_start_time_utc,
+          record_start_time,
+          record_end_time,
+          is_active,
+          ingestion_time,
+          database_etl_dt
+      FROM target_data
+      WHERE is_active = false
+  )
+  -- Combine all the parts for final SCD Type 2 result
+  SELECT * FROM records_to_insert
+  UNION ALL
+  SELECT * FROM records_to_expire
+  UNION ALL
+  SELECT * FROM unchanged_active_records
+  UNION ALL
+  SELECT * FROM all_inactive_records
